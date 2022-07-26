@@ -21,7 +21,110 @@ pub struct Inode {
     block_device: Arc<dyn BlockDevice>,
 }
 
+// the question is how could we delete the A and all sort linked it has create?
+// for example we need to impl the drop function, which contain all inode( the soft linked of main )
+// or trying to using a struct to contain all Inode as a iinode ( which contain Inode and it's sort linked )
+// or maybe add a things inside disk_node which is a caculator of soft linked
 impl Inode {
+
+    // a kind of opertation of soft_linked 
+    pub fn get_disk_soft_linked(&self) -> usize {
+        self.read_disk_inode(|disk_node| {
+            disk_node.soft_linked
+        })
+    }
+    pub fn add_disk_sort_linked(&self)  {
+        self.modify_disk_inode(|disk_node| {
+            disk_node.soft_linked += 1;
+        })
+    }
+    pub fn sub_disk_sort_linked(&self) {
+        self.modify_disk_inode(|disk_node| {
+            disk_node.soft_linked -= 1;
+        })
+    }
+
+
+
+    pub fn create_a_sort_link(&self, old_name: &str, new_name: &str) -> Option<Arc<Inode>> {
+        let mut fs = self.fs.lock();
+        
+        // check if old_name's file has existed and new_name's file haven't existed
+        // check if the file has in the root
+        if self.modify_disk_inode(|root_inode| {
+            // assert it is a directory
+            assert!(root_inode.is_dir());
+            // has the file been created?
+            self.find_inode_id(old_name, root_inode)
+        }).is_none() {
+            return None;
+        } 
+        // check if the file haven't in the root
+        if self.modify_disk_inode(|root_inode| {
+            // assert it is a directory
+            assert!(root_inode.is_dir());
+            // has the file been created?
+            self.find_inode_id(new_name, root_inode)
+        }).is_some() {
+            return None;
+        }
+
+        // create a new file
+        // alloc a inode with an indirect block
+        let old_inode = self.find(old_name).unwrap();
+        let new_inode_id = fs.alloc_inode();        // alloc a new inode
+
+        // initialize inode 我不知道干嘛的
+        let (new_inode_block_id, new_inode_block_offset) = (old_inode.block_id, old_inode.block_offset);
+        // let (new_inode_block_id, new_inode_block_offset) = fs.get_disk_inode_pos(new_inode_id);
+        get_block_cache(
+            new_inode_block_id as usize,
+            Arc::clone(&self.block_device)
+        ).lock().modify(new_inode_block_offset, |new_inode: &mut DiskInode| {
+            new_inode.initialize(DiskInodeType::File);
+        });
+
+        self.modify_disk_inode(|root_inode| {
+            let mut fs = self.fs.lock();
+            // append file in the dirent
+            let file_count = (root_inode.size as usize) / DIRENT_SZ;
+            let new_size = (file_count + 1) * DIRENT_SZ;
+            // increase size
+            self.increase_size(new_size as u32, root_inode, &mut fs);
+            // write dirent
+            let dirent = DirEntry::new(new_name, new_inode_id);
+
+            root_inode.write_at(
+                file_count * DIRENT_SZ,
+                dirent.as_bytes(),
+                &self.block_device,
+            );
+        });
+
+        let new_inode = Inode::new(
+            new_inode_id,
+            new_inode_block_offset,
+            self.fs.clone(),
+            self.block_device.clone(),
+        );
+        new_inode.add_disk_sort_linked();
+        Some(Arc::new(new_inode))
+
+
+
+        // let (block_id, block_offset) = fs.get_disk_inode_pos(new_inode_id);
+        // // return inode
+        // Some(Arc::new(Self::new(
+        //     block_id,
+        //     block_offset,
+        //     self.fs.clone(),
+        //     self.block_device.clone(),
+        // )))
+        // // release efs lock automatically by compiler
+    }
+
+
+
     /// Create a vfs inode
     pub fn new(
         block_id: u32,
@@ -30,6 +133,7 @@ impl Inode {
         block_device: Arc<dyn BlockDevice>,
     ) -> Self {
         Self {
+            // num_of_soft_linked: 0,
             block_id: block_id as usize,
             block_offset,
             fs,
