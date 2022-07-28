@@ -53,9 +53,9 @@ impl Inode {
         let inode_id = inode.get_inode_id();
         debug!("a");
         let mode = inode.get_inode_mode();
-        debug!("b");
+        // debug!("b");
         let nlink = inode.get_disk_hard_linked();
-        debug!("c");
+        // debug!("c");
         (inode_id, mode, nlink as u32)
     }
     // pub fn fstat(&self, inode: &Arc<Inode>) -> u64 {
@@ -88,6 +88,7 @@ impl Inode {
     // 但是可能出现bug，bug的原因主要在删除上面【但是好像没有牵涉到了这个部分？】
     // 注意：基本所有内容都与之相同。
     pub fn create_a_hard_link(&self, old_name: &str, new_name: &str) {
+        // debug!("Happy");
         let mut fs = self.fs.lock();            // gain the mutex lock of 
         // check if old_name has been existed in root_inode
         // if self.modify_disk_inode(|root_inode| {

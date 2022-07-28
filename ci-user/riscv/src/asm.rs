@@ -7,7 +7,7 @@ macro_rules! instruction {
         pub unsafe fn $fnname() {
             match () {
                 #[cfg(all(riscv, feature = "inline-asm"))]
-                () => asm!($asm),
+                () => core::arch::asm!($asm),
 
                 #[cfg(all(riscv, not(feature = "inline-asm")))]
                 () => {

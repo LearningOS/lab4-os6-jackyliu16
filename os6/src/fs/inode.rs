@@ -64,7 +64,7 @@ impl OSInode {
     //     let inode = &inner.inode;                               // Inode
     //     let (ino, dir_add, nlink) = ROOT_INODE.fstat(inode);
     //     let mode = match dir_add {
-    //         // 注意：由于在这个地方理论上不应该传入2 因为disk_node 不存在这第三种状态，因此顺手用了一个新的东西来承接这个东西
+    //         // 注意：由于在这个地方理论上不应该传入2 因为disk_node 不存在这第三种状态，因此顺手用了一个新的东西来承接这个东西,但是逻辑上应该是添加一个新的类型
     //         0 => StatMode::DIR,
     //         1 => StatMode::FILE,
     //         _ => StatMode::NULL,
@@ -175,6 +175,7 @@ impl File for OSInode {
             1 => StatMode::FILE,
             _ => StatMode::NULL,
         };
+        debug!("ino:{}\tmode:{}\tnlink:{}", ino, dir_add, nlink);
         (ino, mode, nlink)
         // 123124
     }

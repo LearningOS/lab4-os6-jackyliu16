@@ -10,6 +10,7 @@ impl Log for SimpleLogger {
         true
     }
     fn log(&self, record: &Record) {
+        // println!("inside log");
         if !self.enabled(record.metadata()) {
             return;
         }
@@ -19,6 +20,7 @@ impl Log for SimpleLogger {
             Level::Info => 34,  // Blue
             Level::Debug => 32, // Green
             Level::Trace => 90, // BrightBlack
+            _ => 31,
         };
         println!(
             "\u{1B}[{}m[{:>5}] {}\u{1B}[0m",
@@ -40,6 +42,7 @@ pub fn init() {
         Some("INFO") => LevelFilter::Info,
         Some("DEBUG") => LevelFilter::Debug,
         Some("TRACE") => LevelFilter::Trace,
+        // _ => LevelFilter::Debug,
         _ => LevelFilter::Off,
     });
 }

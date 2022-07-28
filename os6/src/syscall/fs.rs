@@ -1,7 +1,9 @@
 //! File and filesystem-related syscalls
 
 use crate::mm::PageTable;
+use crate::mm::PhysAddr;
 use crate::mm::VirtAddr;
+use crate::mm::page_table::translated_va2pa;
 use crate::mm::translated_byte_buffer;
 use crate::mm::translated_str;
 use crate::mm::translated_refmut;
@@ -12,6 +14,7 @@ use crate::fs::OpenFlags;
 use crate::fs::Stat;
 use crate::mm::UserBuffer;
 use alloc::sync::Arc;
+use riscv::addr::Page;
 
 pub fn sys_write(fd: usize, buf: *const u8, len: usize) -> isize {
     let token = current_user_token();
@@ -89,9 +92,22 @@ pub fn sys_close(fd: usize) -> isize {
 // fd_table 中所承接的对象的属性必须要求是满足File or send or sync的其中一个的对象
 // 或者直接从三层抽象中实现？
     // 对于 OsInode 实现特殊的方法，允许其调用从 ROOT_INODE 中实现的函数 【 在其他层次中不被允许使用 】
-    // 
+// 
 #[allow(dead_code, unused_variables)]
 pub fn sys_fstat(_fd: usize, _st: *mut Stat) -> isize {
+    
+    /* +====================+ GET ADDR +====================+ */
+    // FIX 需要判断是否可能出现写不完的情况？
+    // BUG REPORT: BC we have using page_table in PageTable::from_token this function will using current_task()
+    // when we putting it inside under the create of inner, then will return error because of we borrow it in two position
+    // and BC it's extral posistion of this two things, it will case a DEADLOCK which will only case timeout to return
+    let virtaddr = VirtAddr::from(_st as usize);
+    debug!("VA:{}", usize::from(virtaddr));
+    let physaddr = PageTable::from_token(current_user_token())
+                                                    .translate_va(virtaddr)
+                                                    .unwrap();
+    debug!("PA: {}", usize::from(physaddr));
+    let pointer = usize::from(physaddr) as *mut Stat;
 
     let task = current_task().unwrap();
     let inner = task.inner_exclusive_access();
@@ -109,23 +125,20 @@ pub fn sys_fstat(_fd: usize, _st: *mut Stat) -> isize {
     if let Some(inode) = &inner.fd_table[_fd] {
         println!("get fd_table");
         let (ino, mode, nlink) = inode.fstat();
+        drop(inner);
         // println!("REPORT:{}", inode.fstat());
         println!("finish get fstat");
 
-        /* +====================+ GET ADDR +====================+ */
-        // FIX 需要判断是否可能出现写不完的情况？
-        let virtaddr = VirtAddr::from(_st as usize);
-        let physaddr = PageTable::from_token(current_user_token())
-                                                        .translate_va(virtaddr)
-                                                        .unwrap();
+        // debug!("get PA:{:?} successed {}", physaddr, usize::from(physaddr));
         let pointer = usize::from(physaddr) as *mut Stat;
-        println!("finish translation");
-        // unsafe {
-        //     (*pointer).dev = 0;
-        //     (*pointer).ino = ino;
-        //     (*pointer).mode = mode;
-        //     (*pointer).nlink = nlink;
-        // }
+        debug!("get pointer successed");
+        // println!("finish translation");
+        unsafe {
+            (*pointer).dev = 0;
+            (*pointer).ino = ino;
+            (*pointer).mode = mode;
+            (*pointer).nlink = nlink;
+        }
     } else {
         println!("[WARN]: couldn't get fd_table");
         return -1
