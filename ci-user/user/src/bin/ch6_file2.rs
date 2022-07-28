@@ -19,14 +19,19 @@ pub fn main() -> i32 {
     println!("B");
     let stat = Stat::new();
     fstat(fd, &stat);
+    println!("C");
     assert_eq!(stat.nlink, 2);
     link(fname, lname1);
     link(fname, lname2);
+    println!("D");
     fstat(fd, &stat);
+    println!("E");
     assert_eq!(stat.nlink, 4);
+    println!("F");
     write(fd, test_str.as_bytes());
     close(fd);
 
+    println!("Finish LINKAT TEST!!!");
     unlink(fname);
     let fd = open(lname0, OpenFlags::RDONLY) as usize;
     let stat2 = Stat::new();

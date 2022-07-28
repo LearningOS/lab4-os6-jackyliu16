@@ -62,3 +62,6 @@ debug: build
 		tmux -2 attach-session -d
 
 .PHONY: build env kernel clean fs-img
+
+dbg: build
+	qemu-system-riscv64 -machine virt -nographic -bios $(BOOTLOADER) -device loader,file=$(KERNEL_BIN),addr=$(KERNEL_ENTRY_PA) -drive file=$(FS_IMG),if=none,format=raw,id=x0 -device virtio-blk-device,drive=x0,bus=virtio-mmio-bus.0 -s -S

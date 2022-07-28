@@ -3,13 +3,12 @@
 use crate::mm::PageTable;
 use crate::mm::PhysAddr;
 use crate::mm::VirtAddr;
-use crate::mm::page_table::translated_va2pa;
 use crate::mm::translated_byte_buffer;
 use crate::mm::translated_str;
 use crate::mm::translated_refmut;
 use crate::task::current_user_token;
 use crate::task::current_task;
-use crate::fs::{open_file, linkat};
+use crate::fs::{open_file, linkat, unlinkat};
 use crate::fs::OpenFlags;
 use crate::fs::Stat;
 use crate::mm::UserBuffer;
@@ -97,18 +96,18 @@ pub fn sys_close(fd: usize) -> isize {
 pub fn sys_fstat(_fd: usize, _st: *mut Stat) -> isize {
     
     /* +====================+ GET ADDR +====================+ */
-    // FIX 需要判断是否可能出现写不完的情况？
     // BUG REPORT: BC we have using page_table in PageTable::from_token this function will using current_task()
     // when we putting it inside under the create of inner, then will return error because of we borrow it in two position
     // and BC it's extral posistion of this two things, it will case a DEADLOCK which will only case timeout to return
     let virtaddr = VirtAddr::from(_st as usize);
     debug!("VA:{}", usize::from(virtaddr));
     let physaddr = PageTable::from_token(current_user_token())
-                                                    .translate_va(virtaddr)
+    .translate_va(virtaddr)
                                                     .unwrap();
     debug!("PA: {}", usize::from(physaddr));
     let pointer = usize::from(physaddr) as *mut Stat;
-
+    
+    // FIX 需要判断是否可能出现写不完的情况？
     let task = current_task().unwrap();
     let inner = task.inner_exclusive_access();
 
@@ -159,10 +158,13 @@ pub fn sys_linkat(_old_name: *const u8, _new_name: *const u8) -> isize {
         return -1
     }
     // create_a_soft_link(new_path.as_str(), old_path.as_str())
-    linkat(old_path.as_str(), new_path.as_str());
-    0
+    linkat(old_path.as_str(), new_path.as_str())
+    
 }
 
 pub fn sys_unlinkat(_name: *const u8) -> isize {
-    -1
+    let token = current_user_token();
+    let file_name = translated_str(token, _name);
+
+    unlinkat(file_name.as_str())
 }

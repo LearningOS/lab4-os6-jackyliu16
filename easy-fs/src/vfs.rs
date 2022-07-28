@@ -48,6 +48,24 @@ impl Inode {
         })
     }
 
+    // pub fn find_inode(&self,name:&str)->Option<Arc<Inode>>{
+    //     let fs = self.fs.lock();//尝试获得文件系统的互斥锁
+    //     self.read_disk_inode(|disk_inode|{
+    //         self.find_inode_id(name,disk_inode).map(|inode_id|{
+    //             let(block_id,block_offset) = fs.get_disk_inode_pos(inode_id);
+    //             // println!("the inode id: {}, The block_id :{}, block_offset :{}",inode_id,block_id,block_offset);
+    //             Arc::new(
+    //                 Inode::new(
+    //                     block_id,
+    //                     block_offset,
+    //                     self.fs.clone(),
+    //                     self.block_device.clone(),
+    //                 )
+    //             )
+    //         })
+    //     })
+    // }
+
     pub fn fstat(&self, inode: &Arc<Inode>) -> (u64, u8, u32) {
         debug!("inside fstat");
         let inode_id = inode.get_inode_id();
@@ -55,13 +73,9 @@ impl Inode {
         let mode = inode.get_inode_mode();
         // debug!("b");
         let nlink = inode.get_disk_hard_linked();
-        // debug!("c");
+        debug!("in inode.fstat: nlink = {}", nlink);
         (inode_id, mode, nlink as u32)
     }
-    // pub fn fstat(&self, inode: &Arc<Inode>) -> u64 {
-    //     let inode_id = inode.get_inode_id();
-    //     inode_id
-    // }
 
     /* +==========+ JUST FOR HARD_LINKED +==========+ */
     #[allow(dead_code)]
@@ -77,75 +91,169 @@ impl Inode {
     }
     pub fn sub_disk_hard_linked(&self) {
         // FIX 是否需要检查可能存在的删除最后一个硬链接点的问题
-
         self.modify_disk_inode(|disk_node| {
             disk_node.hard_linked -= 1;
         })
     }
 
-
+    // BUG report: we mutable using fs and it's it immuable存在死锁可能，需要注意顺序
     // NOTE: 按照原版额的想法是尝试复制一个inode的实现，生成一个硬链接，但是后面发现似乎可以直接添加一个DirEntry?而不重新alloc inode
     // 但是可能出现bug，bug的原因主要在删除上面【但是好像没有牵涉到了这个部分？】
     // 注意：基本所有内容都与之相同。
-    pub fn create_a_hard_link(&self, old_name: &str, new_name: &str) {
-        // debug!("Happy");
-        let mut fs = self.fs.lock();            // gain the mutex lock of 
-        // check if old_name has been existed in root_inode
-        // if self.modify_disk_inode(|root_inode| {
-        //     assert!(root_inode.is_dir());                                   // assert it is a directory
-        //     self.find_inode_id(old_name, root_inode)   
-        // }).is_none() {
-        //     return 
-        // }
+    // BUG REPORT: The passed parameter is given in reverse
+    pub fn create_a_hard_link(&self, old_name: &str, new_name: &str) -> isize {
+        debug!("===== CREATE A HARD LINK =====");
+        
+        // first check if old_name's file existed
+        if self.modify_disk_inode(|root_inode| {
+            assert!(root_inode.is_dir());
+            self.find_inode_id(old_name, root_inode)
+            // let old_inode_id = self.find_inode_id(old_name, root_inode);
+            // old_inode_id.clone()        // i was trying to using life cycle to fix it but it seem not work
+        }).is_none() {
+            debug!("old name not existed");
+            return -1
+        }
+        debug!("old name existed");
 
-        // check if old_name is equal to new_name [finish outside]
-        // just like create a new file
+        let old_inode = self.find(old_name).unwrap();
+        let (inode_block_id,inode_block_offset) = (old_inode.block_id,old_inode.block_offset);
 
-        // // create a new file
-        // let new_inode_id = fs.alloc_inode();        // alloc a inode
-        // // initalize inode
-        // let (new_inode_block_id, new_inode_block_offset) = fs.get_disk_inode_pos(new_inode_id); // get information from inode
-        // get_block_cache(
-        //     new_inode_block_id as usize, 
-        //     Arc::clone(&self.block_device)
-        // ).lock().modify(new_inode_block_offset, |new_inode: & mut DiskInode| {
-        //     new_inode.initialize(DiskInodeType::File);
-        // });
-
-        // i thought i could finish it just by copy the infomation on old_name
-        let old_inode_block =self.find(old_name).unwrap();
-        let old_inode_block_id = old_inode_block.block_id;
-        // old_inode_block.block_offset
-        drop(old_inode_block);
-
-        // let old_inode_block_id = self.find_inode_id(old_name, root_inode).unwrap();
-        // let (old_inode_block_id) = ( old_inode_block.block_id, old_inode_block.block_offset);
-
-        // insert this inode into root_inode
         self.modify_disk_inode(|root_inode| {
-            // append file in dirent [add file size]
+            // BC we need to using fs in this function so, we have to get value before we acquire the fs lock
+            let old_inode_id = self.find_inode_id(old_name, root_inode).unwrap();
+            debug!("get old inode id successed");
+            // acquire mutex lock
+            let mut fs = self.fs.lock();
+            debug!("get fs lock");
+            // increasing the size of the function
             let file_account = (root_inode.size as usize) / DIRENT_SZ;
             let new_size = (file_account + 1) * DIRENT_SZ;
-            // increase size
             self.increase_size(new_size as u32, root_inode, &mut fs);
-            // write dirent
-            let dirent = DirEntry::new(new_name, old_inode_block_id as u32);
+            debug!("finish increase size");
+            let dirent = DirEntry::new(new_name, old_inode_id);
             root_inode.write_at(
-                file_account * DIRENT_SZ,
+                file_account * DIRENT_SZ, 
                 dirent.as_bytes(), 
-                &self.block_device,
+                &self.block_device
             );
+            debug!("finish write information into disk_inode");
         });
-        self.add_disk_hard_linked();
+        let new_inode = Inode::new(
+            inode_block_id as u32,
+            inode_block_offset,
+            self.fs.clone(),
+            self.block_device.clone()
+        );
+        new_inode.add_disk_hard_linked();
 
-        // let (block_id, block_offset) = fs.get_disk_inode_pos(new_inode_id);
-        // return inode
-        // Some(Arc::new(Self::new(
-        //     block_id,
-        //     block_offset,
-        //     self.fs.clone(),
-        //     self.block_device.clone(),
-        // )))
+        // BUG REPORT: 之前在没有对于当前inode进行操作的时候，有尝试过通过inode中保存block_id
+        // 按照self.read_at的方法进行修改，但是似乎也没有办法将修改保存到disk_inode中去，
+        // 原因在于如果我在当前的inode中进行操作本函数由ROOT_INODE调用，直接调用
+        // self.add_disk_hard_linked实际上不会对于该inode产生任何影响
+        // 因此，我们就创造了一个与我们所生成的inode完全相同的clone物品，对于他使用了对应的操作，
+        // 进而使结果可以被用于inode，而非ROOT_INODE
+        0
+    }
+
+    #[allow(unused_variables)]
+    pub fn delete_a_hard_link(&self, file_name: &str) -> isize {
+
+        // first check if file existed
+        debug!("===== DELETE A HARD LINK =====");
+        if self.modify_disk_inode(|root_inode|{
+            assert!(root_inode.is_dir());
+            self.find_inode_id(file_name, root_inode)
+        }).is_none() {
+            debug!("file not existed");
+            return -1
+        }
+
+        // get nlink of a inode
+        let delete_inode = self.find(file_name).unwrap();
+        // let mut delete_inode 
+        debug!("get delete inode successed");
+        let nlink = delete_inode.get_disk_hard_linked();
+        debug!("get nlink as :{} ", nlink);
+
+        delete_inode.sub_disk_hard_linked();
+
+        debug!("get nlink as 2:{}", nlink);
+
+
+        // FIX 我真的不知道发生了什么，但是神奇的就是这个地方只要为 1 就会成功了
+        if nlink == 1 {
+            // into delete file process
+            debug!("into delete file process");
+
+            self.modify_disk_inode(|root_inode| {
+                    let file_count = (root_inode.size as usize) / DIRENT_SZ;
+                    
+                    for i in 0..file_count {
+                        let mut dirent = DirEntry::empty();
+                        assert_eq!(
+                            root_inode.read_at(
+                                i * DIRENT_SZ,
+                                dirent.as_bytes_mut(),
+                                &self.block_device
+                            ),
+                            DIRENT_SZ,
+                        );
+                        if dirent.name() == file_name {
+
+                            if dirent.inode_number() == delete_inode.block_id as u32{
+                                debug!("===");
+                            }
+
+                            root_inode.write_at(
+                                i * DIRENT_SZ, 
+                                DirEntry::empty().as_bytes(),
+                                &self.block_device
+                            );
+                        }
+                    }
+                }
+            );
+            debug!("seem finish delete file");
+            delete_inode.clear();
+            debug!("clear delete_inode");
+        } else {
+            debug!("into delete hard linked process");
+            
+            // FIX 有两种方法删除对应的inode，一种是简单的将原先的inode的值抹去，另外一种是删除并将其后面的元素向前挪动
+            // 但是只剩下两天时间，可能没有那么多时间来让我完成后一种方式的调试，因此此处只是简单的的采用一个将原先的值抹去的操作
+            self.modify_disk_inode(|root_inode| {
+                // let mut fs = self.fs.lock();
+                // debug!("acquire fs lock");
+                let file_count = (root_inode.size as usize) / DIRENT_SZ;
+                
+                for i in 0..file_count {
+                    let mut dirent = DirEntry::empty();
+                    assert_eq!(
+                        root_inode.read_at(
+                            i * DIRENT_SZ,
+                            dirent.as_bytes_mut(),
+                            &self.block_device
+                        ),
+                        DIRENT_SZ,
+                    );
+                    if dirent.inode_number() == delete_inode.block_id as u32{
+                        
+                        if dirent.name() == file_name {
+                            debug!("+++");
+                        }
+                        debug!("start rewrite processed");
+                        root_inode.write_at(
+                            DIRENT_SZ * i,
+                            DirEntry::empty().as_bytes(), 
+                            &self.block_device
+                        );
+                        debug!("rewrite inode space successed");
+                    }
+                }
+            })
+        }
+        0
     }
 
     /// Create a vfs inode
@@ -204,6 +312,7 @@ impl Inode {
     }
     /// Find inode under current inode by name
     pub fn find(&self, name: &str) -> Option<Arc<Inode>> {
+        debug!("inside find function");
         let fs = self.fs.lock();
         self.read_disk_inode(|disk_inode| {
             self.find_inode_id(name, disk_inode)

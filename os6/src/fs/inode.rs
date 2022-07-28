@@ -161,14 +161,15 @@ impl File for OSInode {
     fn fstat(&self) -> (u64, StatMode, u32) {
 
     // fn fstat(&self) -> u64 {
-        println!("A");
+        // println!("A");
         let inner = self.inner.exclusive_access();     // OSInode
-        println!("B");
+        // println!("B");
         let inode = &inner.inode;                               // Inode
-        println!("C");
+        // println!("C");
         let (ino, dir_add, nlink) = ROOT_INODE.fstat(inode);
+        debug!("return nlink = {} in OSInode", nlink);
         // let s = ROOT_INODE.fstat(inode); 
-        println!("D");
+        // println!("D");
         let mode = match dir_add {
             // 注意：由于在这个地方理论上不应该传入2 因为disk_node 不存在这第三种状态，因此顺手用了一个新的东西来承接这个东西
             0 => StatMode::DIR,
@@ -207,11 +208,11 @@ impl File for OSInode {
     }
 }
 
-pub fn linkat(new_name: &str, old_name: &str) {
+pub fn linkat(old_name: &str, new_name: &str) -> isize{
     ROOT_INODE.create_a_hard_link(old_name, new_name)
 }
 
-pub fn delete_a_soft_link(name: &str) -> isize {
-    // ROOT_INODE.delete_a_soft_link(name)
-    0
+pub fn unlinkat(name: &str) -> isize {
+    ROOT_INODE.delete_a_hard_link(name)
+    // -1
 }

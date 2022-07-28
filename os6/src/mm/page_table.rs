@@ -62,15 +62,6 @@ pub struct PageTable {
     frames: Vec<FrameTracker>,
 }
 
-// translate va -> pa
-pub fn translated_va2pa(token: usize, va: VirtAddr) -> usize {
-    debug!("AA");
-    let page_table = PageTable::from_token(token);
-    debug!("A");
-    let pa = page_table.translate_va(va).unwrap();
-    debug!("B");
-    pa.0
-}
 /// Assume that it won't oom when creating/mapping.
 impl PageTable {
     pub fn new() -> Self {
