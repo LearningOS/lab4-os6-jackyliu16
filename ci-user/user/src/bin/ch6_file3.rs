@@ -9,6 +9,7 @@ use user_lib::{close, open, unlink, write, OpenFlags};
 
 #[no_mangle]
 pub fn main() -> i32 {
+    println!(" +==========+ TEST FOR FILE3 +===========+ ");
     let test_str = "some random long long long long long long long long string".repeat(50);
     let fname = "fname3\0";
     for i in 0..10 {

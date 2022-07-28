@@ -9,21 +9,29 @@ use user_lib::{close, fstat, link, open, read, unlink, write, OpenFlags, Stat};
 
 #[no_mangle]
 pub fn main() -> i32 {
+    println!("+===========++ TEST FOR FILE 2 ++===========+");
     let test_str = "Hello, world!";
     let fname = "fname2\0";
     let (lname0, lname1, lname2) = ("linkname0\0", "linkname1\0", "linkname2\0");
     let fd = open(fname, OpenFlags::CREATE | OpenFlags::WRONLY) as usize;
+    println!("A");
     link(fname, lname0);
+    println!("B");
     let stat = Stat::new();
     fstat(fd, &stat);
+    println!("C");
     assert_eq!(stat.nlink, 2);
     link(fname, lname1);
     link(fname, lname2);
+    println!("D");
     fstat(fd, &stat);
+    println!("E");
     assert_eq!(stat.nlink, 4);
+    println!("F");
     write(fd, test_str.as_bytes());
     close(fd);
 
+    println!("Finish LINKAT TEST!!!");
     unlink(fname);
     let fd = open(lname0, OpenFlags::RDONLY) as usize;
     let stat2 = Stat::new();

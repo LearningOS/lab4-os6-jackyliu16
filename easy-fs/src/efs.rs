@@ -1,3 +1,5 @@
+use core::{mem::size_of};
+
 use alloc::sync::Arc;
 use spin::Mutex;
 use super::{
@@ -25,6 +27,12 @@ pub struct EasyFileSystem {
 type DataBlock = [u8; BLOCK_SZ];
 
 impl EasyFileSystem {
+    // 这个地方的计算方法是尝试通过计算在每一个block中保存的inode的数量来实现计算当前所属的inode_id
+    pub fn get_inode_id(&self, block_id: u32, offset: usize) -> u64 {
+        let num_of_inode_per_block = BLOCK_SZ / size_of::<DiskInode>();
+        let tmp = (block_id - self.inode_area_start_block) * num_of_inode_per_block as u32 + offset as u32;
+        tmp as u64
+    }
     /// Create a filesystem from a block device
     pub fn create(
         block_device: Arc<dyn BlockDevice>,

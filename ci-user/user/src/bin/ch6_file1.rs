@@ -9,12 +9,16 @@ use user_lib::{close, fstat, open, OpenFlags, Stat, StatMode};
 
 #[no_mangle]
 pub fn main() -> i32 {
+    println!("+==========+ FILE 1 +==========+ ");
     let fname = "fname1\0";
     let fd = open(fname, OpenFlags::CREATE | OpenFlags::WRONLY);
+    println!("open");
     assert!(fd > 0);
     let fd = fd as usize;
     let stat: Stat = Stat::new();
+    println!("create stat successed");
     let ret = fstat(fd, &stat);
+    println!("get stat successed");
     assert_eq!(ret, 0);
     assert_eq!(stat.mode, StatMode::FILE);
     assert_eq!(stat.nlink, 1);
