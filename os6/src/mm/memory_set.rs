@@ -72,10 +72,10 @@ impl MemorySet {
     }
 
     pub fn delete_pte_from(&mut self, vpn: VirtPageNum) {
-        println!("===================================");
+        // println!("===================================");
         for map_area in self.areas.iter_mut() {
             if map_area.has_vpn(vpn) {
-                print!("======= delete succeed~ ====== ");
+                // print!("======= delete succeed~ ====== ");
                 map_area.unmap_one(&mut self.page_table, vpn);
             }
         }

@@ -1,4 +1,5 @@
 use super::File;
+use crate::fs::StatMode;
 use crate::mm::{UserBuffer};
 use crate::sbi::console_getchar;
 use crate::task::suspend_current_and_run_next;
@@ -9,6 +10,13 @@ pub struct Stdin;
 pub struct Stdout;
 
 impl File for Stdin {
+    fn fstat(&self) -> (u64, super::StatMode, u32) {
+        println!("[ERRPR]: using fstat in Stdin!!!");
+        (0, StatMode::NULL, 0)
+    }
+    // fn fstat(&self) -> u64 {
+    //     321
+    // }
     fn readable(&self) -> bool { true }
     fn writable(&self) -> bool { false }
     fn read(&self, mut user_buf: UserBuffer) -> usize {
@@ -34,6 +42,13 @@ impl File for Stdin {
 }
 
 impl File for Stdout {
+    // fn fstat(&self) -> u64 {
+    //     123
+    // }
+    fn fstat(&self) -> (u64, super::StatMode, u32) {
+        println!("[ERRPR]: using fstat in Stdout!!!");
+        (0, StatMode::NULL, 0)
+    }
     fn readable(&self) -> bool { false }
     fn writable(&self) -> bool { true }
     fn read(&self, _user_buf: UserBuffer) -> usize{

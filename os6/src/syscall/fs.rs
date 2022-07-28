@@ -1,11 +1,13 @@
 //! File and filesystem-related syscalls
 
+use crate::mm::PageTable;
+use crate::mm::VirtAddr;
 use crate::mm::translated_byte_buffer;
 use crate::mm::translated_str;
 use crate::mm::translated_refmut;
 use crate::task::current_user_token;
 use crate::task::current_task;
-use crate::fs::{open_file, create_a_soft_link};
+use crate::fs::{open_file, linkat};
 use crate::fs::OpenFlags;
 use crate::fs::Stat;
 use crate::mm::UserBuffer;
@@ -80,8 +82,56 @@ pub fn sys_close(fd: usize) -> isize {
 }
 
 // YOUR JOB: 扩展 easy-fs 和内核以实现以下三个 syscall
+// NOTE: 这个应该就是一个类似于时间读取的部分，按照我们获取时间的方案重新获取一次就可以了？
+// 通过指针获取对应内存位置，然后通过unsafe包裹向raw pointer(还是啥别的)里面写入对应的数据内容
+// 主要存在的疑惑的位置在于我看到stat中包含的 bitflags! 这是不是意味着对于DIR and FILE 而言都存在这个调用
+// 因此，是不是就不能使用类似ROOT_INODE来作为方法的承接对象了？应该采用某种方法，能够同时被FILE and DIR作用的方法
+// fd_table 中所承接的对象的属性必须要求是满足File or send or sync的其中一个的对象
+// 或者直接从三层抽象中实现？
+    // 对于 OsInode 实现特殊的方法，允许其调用从 ROOT_INODE 中实现的函数 【 在其他层次中不被允许使用 】
+    // 
+#[allow(dead_code, unused_variables)]
 pub fn sys_fstat(_fd: usize, _st: *mut Stat) -> isize {
-   -1
+
+    let task = current_task().unwrap();
+    let inner = task.inner_exclusive_access();
+
+    // bounds checking
+    if _fd >= inner.fd_table.len() {
+        println!("[WARN]: the len request is out of limit");
+        return -1;
+    }   
+    // DELETE 题目没有明说是否是代表着没有这个必要...
+    if inner.fd_table[_fd].is_none() {
+        println!("[WARN]: fd_table wasn't existed !!!");
+        return -1;
+    }
+    if let Some(inode) = &inner.fd_table[_fd] {
+        println!("get fd_table");
+        let (ino, mode, nlink) = inode.fstat();
+        // println!("REPORT:{}", inode.fstat());
+        println!("finish get fstat");
+
+        /* +====================+ GET ADDR +====================+ */
+        // FIX 需要判断是否可能出现写不完的情况？
+        let virtaddr = VirtAddr::from(_st as usize);
+        let physaddr = PageTable::from_token(current_user_token())
+                                                        .translate_va(virtaddr)
+                                                        .unwrap();
+        let pointer = usize::from(physaddr) as *mut Stat;
+        println!("finish translation");
+        // unsafe {
+        //     (*pointer).dev = 0;
+        //     (*pointer).ino = ino;
+        //     (*pointer).mode = mode;
+        //     (*pointer).nlink = nlink;
+        // }
+    } else {
+        println!("[WARN]: couldn't get fd_table");
+        return -1
+    }
+    println!("success: fstat syscall");
+    0
 }
 
 
@@ -91,7 +141,13 @@ pub fn sys_linkat(_old_name: *const u8, _new_name: *const u8) -> isize {
     let old_path = translated_str(token, _old_name);
     let new_path = translated_str(token, _new_name);
 
-    create_a_soft_link(new_path.as_str(), old_path.as_str())
+    // base on the given possibliy result
+    if old_path == new_path {
+        return -1
+    }
+    // create_a_soft_link(new_path.as_str(), old_path.as_str())
+    linkat(old_path.as_str(), new_path.as_str());
+    0
 }
 
 pub fn sys_unlinkat(_name: *const u8) -> isize {

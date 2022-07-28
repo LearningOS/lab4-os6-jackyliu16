@@ -8,7 +8,7 @@ use alloc::sync::Arc;
 use lazy_static::*;
 use bitflags::*;
 use alloc::vec::Vec;
-use super::File;
+use super::{File, StatMode, Stat};
 use crate::mm::UserBuffer;
 
 /// A wrapper around a filesystem inode
@@ -56,6 +56,21 @@ impl OSInode {
         }
         v
     }
+    // // 尝试过只实现这个元素的情况下，没有办法从`syscall::fs`中进行访问
+    // // 似乎只有学习类似`read`或者`write`的操作，生成一个全新的trait类型，并在 `Stdin` and `Stdout`中实现，才能使之被正常访问。
+    // #[allow(dead_code)]
+    // fn fstat(&self) -> (u64, StatMode, u32) {
+    //     let inner = self.inner.exclusive_access();     // OSInode
+    //     let inode = &inner.inode;                               // Inode
+    //     let (ino, dir_add, nlink) = ROOT_INODE.fstat(inode);
+    //     let mode = match dir_add {
+    //         // 注意：由于在这个地方理论上不应该传入2 因为disk_node 不存在这第三种状态，因此顺手用了一个新的东西来承接这个东西
+    //         0 => StatMode::DIR,
+    //         1 => StatMode::FILE,
+    //         _ => StatMode::NULL,
+    //     };
+    //     (ino, mode, nlink)
+    // }
 }
 
 lazy_static! {
@@ -140,6 +155,29 @@ pub fn open_file(name: &str, flags: OpenFlags) -> Option<Arc<OSInode>> {
 }
 
 impl File for OSInode {
+    // 尝试过只实现这个元素的情况下，没有办法从`syscall::fs`中进行访问
+    // 似乎只有学习类似`read`或者`write`的操作，生成一个全新的trait类型，并在 `Stdin` and `Stdout`中实现，才能使之被正常访问。
+    #[allow(dead_code)]
+    fn fstat(&self) -> (u64, StatMode, u32) {
+
+    // fn fstat(&self) -> u64 {
+        println!("A");
+        let inner = self.inner.exclusive_access();     // OSInode
+        println!("B");
+        let inode = &inner.inode;                               // Inode
+        println!("C");
+        let (ino, dir_add, nlink) = ROOT_INODE.fstat(inode);
+        // let s = ROOT_INODE.fstat(inode); 
+        println!("D");
+        let mode = match dir_add {
+            // 注意：由于在这个地方理论上不应该传入2 因为disk_node 不存在这第三种状态，因此顺手用了一个新的东西来承接这个东西
+            0 => StatMode::DIR,
+            1 => StatMode::FILE,
+            _ => StatMode::NULL,
+        };
+        (ino, mode, nlink)
+        // 123124
+    }
     fn readable(&self) -> bool { self.readable }
     fn writable(&self) -> bool { self.writable }
     fn read(&self, mut buf: UserBuffer) -> usize {
@@ -168,12 +206,8 @@ impl File for OSInode {
     }
 }
 
-pub fn create_a_soft_link(new_name: &str, old_name: &str) -> isize {
-    if let Some(_) = ROOT_INODE.create_a_sort_link(old_name, new_name) {
-        -1
-    } else {
-        -2
-    }
+pub fn linkat(new_name: &str, old_name: &str) {
+    ROOT_INODE.create_a_hard_link(old_name, new_name)
 }
 
 pub fn delete_a_soft_link(name: &str) -> isize {

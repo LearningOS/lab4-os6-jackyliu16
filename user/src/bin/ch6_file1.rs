@@ -9,6 +9,7 @@ use user_lib::{close, fstat, open, OpenFlags, Stat, StatMode};
 
 #[no_mangle]
 pub fn main() -> i32 {
+    println!("+===========++ TEST FOR FSTAT ++===========+");
     let fname = "fname1\0";
     let fd = open(fname, OpenFlags::CREATE | OpenFlags::WRONLY);
     assert!(fd > 0);

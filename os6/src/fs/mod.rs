@@ -3,12 +3,15 @@ mod inode;
 
 use crate::mm::UserBuffer;
 
+// QUESTION: 这个地方应该理解成为 File trait 需要同时 Send and Sync 特征？
 /// The common abstraction of all IO resources
 pub trait File : Send + Sync {
     fn readable(&self) -> bool;
     fn writable(&self) -> bool;
     fn read(&self, buf: UserBuffer) -> usize;
     fn write(&self, buf: UserBuffer) -> usize;
+    fn fstat(&self) -> (u64, StatMode, u32);
+    // fn fstat(&self) -> u64;
 }
 
 /// The stat of a inode
@@ -40,4 +43,4 @@ bitflags! {
 }    
 
 pub use stdio::{Stdin, Stdout};
-pub use inode::{OSInode, open_file, OpenFlags, list_apps, create_a_soft_link, delete_a_soft_link};
+pub use inode::{OSInode, open_file, OpenFlags, list_apps, linkat, delete_a_soft_link};

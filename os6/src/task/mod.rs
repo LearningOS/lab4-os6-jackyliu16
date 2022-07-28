@@ -106,15 +106,15 @@ pub fn add_initproc() {
 // use crate::config::PAGE_SIZE;
 #[allow(dead_code, unused_variables, unused)]
 pub fn mmap(start: usize, len: usize, port: usize) -> isize{
-    println!("1");
+    // println!("1");
     let task = current_task().unwrap();
     let mut inner = task.inner_exclusive_access();
 
-    println!("2");
+    // println!("2");
     let start_va = VirtPageNum::from(start / PAGE_SIZE);
     let end_va = VirtPageNum::from((start+len) / PAGE_SIZE);
 
-    println!("3");
+    // println!("3");
     for vpn in start_va.0..end_va.0 {
         if inner.memory_set.find_vpn(VirtPageNum(vpn)) {
             // println!("{}  {}", start / PAGE_SIZE, (start + len) / PAGE_SIZE);
@@ -123,45 +123,45 @@ pub fn mmap(start: usize, len: usize, port: usize) -> isize{
         }
     }
 
-    println!("4");
+    // println!("4");
     let permission = MapPermission::from_bits(((port << 1) | 16) as u8);
     
-    println!("5");
+    // println!("5");
     inner.memory_set.insert_framed_area(VirtAddr::from(start_va), VirtAddr::from(end_va), permission.unwrap());
     // inner.memory_set.insert_framed_area(VirtAddr::from(start), VirtAddr::from(start+len), permission.unwrap());
 
-    println!("6");
+    // println!("6");
     for vpn in start_va.0..end_va.0 {
             if false == inner.memory_set.find_vpn(VirtPageNum(vpn)) {
             return -1;
         }
     }
-    println!("7");
+    // println!("7");
     0
 }
 
 #[allow(unused)]
 pub fn unmmap(start: usize, len: usize) -> isize {
-    println!("inside unmmap function !!!") ;
-    println!("A1");
+    // println!("inside unmmap function !!!") ;
+    // println!("A1");
     let task = current_task().unwrap();
     let mut inner = task.inner_exclusive_access();
 
-    println!("A2");
+    // println!("A2");
     let start_va = VirtPageNum::from(start / PAGE_SIZE);
     let end_va = VirtPageNum::from((start+len) / PAGE_SIZE);
 
-    println!("A");
+    // println!("A");
     for vpn in start_va.0..end_va.0 { 
         if !(inner.memory_set.find_vpn(VirtPageNum(vpn))) {
             println!("it seem couldn't find the pte");
             return -1;
         }
     }
-    println!("B");
+    // println!("B");
     for vpn in start_va.0..end_va.0 {
         inner.memory_set.delete_pte_from(VirtPageNum(vpn));
     }
-    println!("successed!!!");
+    // println!("successed!!!");
     0
 }
